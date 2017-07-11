@@ -12,7 +12,7 @@
  * the License.
  */
 
-package com.google.api.services.samples.drive.cmdline;
+package jp.co.thcomp.google_drive;
 
 import com.google.api.client.googleapis.batch.BatchCallback;
 import com.google.api.client.googleapis.batch.BatchRequest;

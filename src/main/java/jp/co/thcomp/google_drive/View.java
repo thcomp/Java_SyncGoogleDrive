@@ -12,7 +12,7 @@
  * the License.
  */
 
-package com.google.api.services.samples.drive.cmdline;
+package jp.co.thcomp.google_drive;
 
 /**
  * Utility methods to print to the command line.
