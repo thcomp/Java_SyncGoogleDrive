@@ -25,7 +25,8 @@ import java.util.HashMap;
  */
 public class DriveItem {
   private ArrayList<DriveItem> mChildDriveItemList = new ArrayList<DriveItem>();
-  private HashMap<String, DriveItem> mChildDriveItemMap = new HashMap<String, DriveItem>();
+  private HashMap<String, DriveItem> mChildDriveItemIdMap = new HashMap<String, DriveItem>();
+  private HashMap<String, DriveItem> mChildDriveItemNameMap = new HashMap<String, DriveItem>();
 
   private File mFile;
   private boolean mIsFolder = false;
@@ -48,12 +49,17 @@ public class DriveItem {
     return mFile.getId();
   }
 
+  public long getLastModified() {
+    return mFile.getModifiedDate().getValue();
+  }
+
   public void addChild(DriveItem item) {
     synchronized (this) {
       String id = item.mFile.getId();
 
-      if (!mChildDriveItemMap.containsKey(item.mFile.getId())) {
-        mChildDriveItemMap.put(id, item);
+      if (!mChildDriveItemIdMap.containsKey(item.mFile.getId())) {
+        mChildDriveItemIdMap.put(id, item);
+        mChildDriveItemNameMap.put(item.mFile.getTitle(), item);
         mChildDriveItemList.add(item);
       }
     }
@@ -63,9 +69,10 @@ public class DriveItem {
     synchronized (this) {
       String id = file.getId();
 
-      if (!mChildDriveItemMap.containsKey(file.getId())) {
+      if (!mChildDriveItemIdMap.containsKey(file.getId())) {
         DriveItem item = new DriveItem(file);
-        mChildDriveItemMap.put(id, item);
+        mChildDriveItemIdMap.put(id, item);
+        mChildDriveItemNameMap.put(item.mFile.getTitle(), item);
         mChildDriveItemList.add(item);
       }
     }
@@ -80,6 +87,6 @@ public class DriveItem {
   }
 
   public DriveItem getChild(String id) {
-    return mChildDriveItemMap.get(id);
+    return mChildDriveItemIdMap.get(id);
   }
 }
