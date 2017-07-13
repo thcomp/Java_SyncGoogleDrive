@@ -49,6 +49,10 @@ public class DriveItem {
     return mFile.getId();
   }
 
+  public String getTitle() {
+    return mFile.getTitle();
+  }
+
   public long getLastModified() {
     return mFile.getModifiedDate().getValue();
   }
@@ -82,11 +86,15 @@ public class DriveItem {
     return mChildDriveItemList.size();
   }
 
-  public DriveItem getChild(int index) {
+  public DriveItem getChildAt(int index) {
     return mChildDriveItemList.get(index);
   }
 
-  public DriveItem getChild(String id) {
+  public DriveItem getChildById(String id) {
     return mChildDriveItemIdMap.get(id);
+  }
+
+  public DriveItem getChildByName(String name) {
+    return mChildDriveItemNameMap.get(name);
   }
 }

@@ -36,6 +36,8 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 
 /**
@@ -117,6 +119,33 @@ public class DriveSample {
       FileListHelper helper = new FileListHelper(drive, "AIzaSyBhkIrt7Sxf8WulmQysmawOTQnD1TATgZU");
       DriveItem item = helper.getDriveItem("Photo");
       java.io.File localRootFolder = new java.io.File("" /* TODO */);
+
+      ArrayList<java.io.File> notExistAtDriveItemList = new ArrayList<java.io.File>();
+      ArrayList<DriveItem> notExistAtLocalFileList = new ArrayList<DriveItem>();
+      ArrayList<Object> notMatchItemList = new ArrayList<Object>();
+      boolean ret = isMatch(localRootFolder, item, notExistAtDriveItemList, notExistAtLocalFileList,
+          notMatchItemList);
+
+      if (!ret) {
+        if (notExistAtDriveItemList.size() > 0) {
+          // upload local files to Google Drive
+          for (java.io.File notExistAtDriveItem : notExistAtDriveItemList) {
+            uploadLocalFilesToGoogleDrive(notExistAtDriveItem, item);
+          }
+        }
+
+        if (notExistAtLocalFileList.size() > 0) {
+          // download file to local file system at Google Drive
+          for (DriveItem notExistAtLocalFile : notExistAtLocalFileList) {
+            downloadGoogleDriveFilesToLocalFileSystem(notExistAtLocalFile, localRootFolder);
+          }
+        }
+
+        if (notMatchItemList.size() > 0) {
+          // update file by modified file
+          // TODO re-enter isMatch for children...
+        }
+      }
       return;
     } catch (IOException e) {
       System.err.println(e.getMessage());
@@ -126,8 +155,19 @@ public class DriveSample {
     System.exit(1);
   }
 
+  private static void uploadLocalFilesToGoogleDrive(java.io.File notExistAtDriveItem,
+      DriveItem parentDriveItem) {
+    // TODO
+  }
+
+  private static void downloadGoogleDriveFilesToLocalFileSystem(DriveItem notExistAtLocalFile,
+      java.io.File parentLocalFolder) {
+    // TODO
+  }
+
   private static boolean isMatch(java.io.File localFolder, DriveItem driveFolder,
-      List<java.io.File> unmatchLocalFileList, List<DriveItem> unmatchDriveItemList) {
+      List<java.io.File> notExistAtDriveItemList, List<DriveItem> notExistAtLocalFileList,
+      List<Object> notMatchItemList) {
 
     boolean ret = false;
 
@@ -135,11 +175,52 @@ public class DriveSample {
       ret = true;
     } else {
       java.io.File[] childFileArray = localFolder.listFiles();
-      for (java.io.File childFile : childFileArray) {
-        if (!childFile.getName().startsWith(".")) {
+      HashMap<String, java.io.File> localChildFileMapByName = new HashMap<String, java.io.File>();
 
+      for (java.io.File childFile : childFileArray) {
+        String childName = childFile.getName();
+        localChildFileMapByName.put(childName, childFile);
+
+        if (!childName.startsWith(".")) {
+          DriveItem childDriveItem = driveFolder.getChildByName(childName);
+
+          if (childDriveItem == null) {
+            notExistAtDriveItemList.add(childFile);
+          } else {
+            // 最終更新日が新しい方が真として、それをリストに追加
+            if (childDriveItem.getLastModified() > childFile.lastModified()) {
+              notMatchItemList.add(childDriveItem);
+            } else if (childDriveItem.getLastModified() < childFile.lastModified()) {
+              notMatchItemList.add(childFile);
+            } else {
+              // 最終更新日が等しい場合は一致と判断
+            }
+          }
         }
       }
+
+      for (int i = 0, size = driveFolder.getChildCount(); i < size; i++) {
+        DriveItem childDriveItem = driveFolder.getChildAt(i);
+        java.io.File childLocalFile = localChildFileMapByName.get(childDriveItem.getTitle());
+
+        if (childLocalFile == null) {
+          notExistAtLocalFileList.add(childDriveItem);
+        } else {
+          // 最終更新日が新しい方が真として、それをリストに追加
+          if (childDriveItem.getLastModified() > childLocalFile.lastModified()) {
+            notMatchItemList.add(childDriveItem);
+          } else if (childDriveItem.getLastModified() < childLocalFile.lastModified()) {
+            notMatchItemList.add(childLocalFile);
+          } else {
+            // 最終更新日が等しい場合は一致と判断
+          }
+        }
+      }
+    }
+
+    if (!ret) {
+      ret = ((notExistAtDriveItemList.size() == 0) && (notExistAtLocalFileList.size() == 0)
+          && (notMatchItemList.size() == 0));
     }
 
     return ret;
