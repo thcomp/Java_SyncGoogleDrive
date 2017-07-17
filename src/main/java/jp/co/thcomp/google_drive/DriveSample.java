@@ -32,6 +32,8 @@ import com.google.api.services.drive.Drive;
 import com.google.api.services.drive.DriveScopes;
 import com.google.api.services.drive.model.File;
 
+import jp.co.thcomp.google_drive.ActionInfo.ActionType;
+
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -117,35 +119,7 @@ public class DriveSample {
           .setApplicationName(APPLICATION_NAME).build();
 
       FileListHelper helper = new FileListHelper(drive, "AIzaSyBhkIrt7Sxf8WulmQysmawOTQnD1TATgZU");
-      DriveItem item = helper.getDriveItem("Photo");
-      java.io.File localRootFolder = new java.io.File("" /* TODO */);
-
-      ArrayList<java.io.File> notExistAtDriveItemList = new ArrayList<java.io.File>();
-      ArrayList<DriveItem> notExistAtLocalFileList = new ArrayList<DriveItem>();
-      ArrayList<Object> notMatchItemList = new ArrayList<Object>();
-      boolean ret = isMatch(localRootFolder, item, notExistAtDriveItemList, notExistAtLocalFileList,
-          notMatchItemList);
-
-      if (!ret) {
-        if (notExistAtDriveItemList.size() > 0) {
-          // upload local files to Google Drive
-          for (java.io.File notExistAtDriveItem : notExistAtDriveItemList) {
-            uploadLocalFilesToGoogleDrive(notExistAtDriveItem, item);
-          }
-        }
-
-        if (notExistAtLocalFileList.size() > 0) {
-          // download file to local file system at Google Drive
-          for (DriveItem notExistAtLocalFile : notExistAtLocalFileList) {
-            downloadGoogleDriveFilesToLocalFileSystem(notExistAtLocalFile, localRootFolder);
-          }
-        }
-
-        if (notMatchItemList.size() > 0) {
-          // update file by modified file
-          // TODO re-enter isMatch for children...
-        }
-      }
+      syncFolder(helper, "" /* TODO */, "Photo");
       return;
     } catch (IOException e) {
       System.err.println(e.getMessage());
@@ -155,19 +129,66 @@ public class DriveSample {
     System.exit(1);
   }
 
-  private static void uploadLocalFilesToGoogleDrive(java.io.File notExistAtDriveItem,
-      DriveItem parentDriveItem) {
-    // TODO
+  private static void syncFolder(FileListHelper helper, String localFolderPath,
+      String driveItemPath) {
+    DriveItem item = helper.getDriveItem(driveItemPath);
+    java.io.File localRootFolder = new java.io.File(localFolderPath);
+
+    ArrayList<ActionInfo> actionInfoList = new ArrayList<ActionInfo>();
+    boolean ret = isMatch(localRootFolder, item, actionInfoList);
+
+    if (!ret) {
+      if (actionInfoList.size() > 0) {
+        for (ActionInfo actionInfo : actionInfoList) {
+          switch (actionInfo.getActionType()) {
+            case UploadToDrive:
+              // upload local files to Google Drive
+              uploadLocalFilesToGoogleDrive(actionInfo);
+              break;
+            case DownloadToLocal:
+              // download file to local file system at Google Drive
+              downloadGoogleDriveFilesToLocalFileSystem(actionInfo);
+              break;
+            case UpdateFromLocalToDrive:
+              // update drive item by local file
+              updateFileFromLocalToDrive(actionInfo);
+              break;
+            case UpdateFromDriveToLocal:
+              // update drive item by local file
+              updateFileFromDriveToLocal(actionInfo);
+              break;
+          }
+        }
+      }
+    }
   }
 
-  private static void downloadGoogleDriveFilesToLocalFileSystem(DriveItem notExistAtLocalFile,
-      java.io.File parentLocalFolder) {
-    // TODO
+  private static void uploadLocalFilesToGoogleDrive(ActionInfo actionInfo) {
+    java.io.File notExistAtDriveItem = (java.io.File) actionInfo.getUpdateFrom();
+    DriveItem parentDriveItem = (DriveItem) actionInfo.getUpdateTo();
+
+    if (notExistAtDriveItem.isDirectory()) {
+
+    }
+  }
+
+  private static void downloadGoogleDriveFilesToLocalFileSystem(ActionInfo actionInfo) {
+    DriveItem notExistAtLocalFile = (DriveItem) actionInfo.getUpdateFrom();
+    java.io.File parentLocalFolder = (java.io.File) actionInfo.getUpdateTo();
+  }
+
+  private static void updateFileFromLocalToDrive(ActionInfo actionInfo) {
+    java.io.File notExistAtRemoteFile = (java.io.File) actionInfo.getUpdateFrom();
+    DriveItem parentLocalFolder = (DriveItem) actionInfo.getUpdateTo();
+  }
+
+  private static void updateFileFromDriveToLocal(ActionInfo actionInfo) {
+    DriveItem notExistAtLocalFile = (DriveItem) actionInfo.getUpdateFrom();
+    java.io.File parentLocalFolder = (java.io.File) actionInfo.getUpdateTo();
   }
 
   private static boolean isMatch(java.io.File localFolder, DriveItem driveFolder,
-      List<java.io.File> notExistAtDriveItemList, List<DriveItem> notExistAtLocalFileList,
-      List<Object> notMatchItemList) {
+      List<ActionInfo> actionInfoList) {
 
     boolean ret = false;
 
@@ -185,13 +206,15 @@ public class DriveSample {
           DriveItem childDriveItem = driveFolder.getChildByName(childName);
 
           if (childDriveItem == null) {
-            notExistAtDriveItemList.add(childFile);
+            actionInfoList.add(new ActionInfo(ActionType.UploadToDrive, childFile, driveFolder));
           } else {
             // 最終更新日が新しい方が真として、それをリストに追加
             if (childDriveItem.getLastModified() > childFile.lastModified()) {
-              notMatchItemList.add(childDriveItem);
+              actionInfoList.add(
+                  new ActionInfo(ActionType.UpdateFromDriveToLocal, childDriveItem, childFile));
             } else if (childDriveItem.getLastModified() < childFile.lastModified()) {
-              notMatchItemList.add(childFile);
+              actionInfoList.add(
+                  new ActionInfo(ActionType.UpdateFromLocalToDrive, childFile, childDriveItem));
             } else {
               // 最終更新日が等しい場合は一致と判断
             }
@@ -204,13 +227,16 @@ public class DriveSample {
         java.io.File childLocalFile = localChildFileMapByName.get(childDriveItem.getTitle());
 
         if (childLocalFile == null) {
-          notExistAtLocalFileList.add(childDriveItem);
+          actionInfoList
+              .add(new ActionInfo(ActionType.DownloadToLocal, childDriveItem, localFolder));
         } else {
           // 最終更新日が新しい方が真として、それをリストに追加
           if (childDriveItem.getLastModified() > childLocalFile.lastModified()) {
-            notMatchItemList.add(childDriveItem);
+            actionInfoList.add(
+                new ActionInfo(ActionType.UpdateFromDriveToLocal, childDriveItem, childLocalFile));
           } else if (childDriveItem.getLastModified() < childLocalFile.lastModified()) {
-            notMatchItemList.add(childLocalFile);
+            actionInfoList.add(
+                new ActionInfo(ActionType.UpdateFromLocalToDrive, childLocalFile, childDriveItem));
           } else {
             // 最終更新日が等しい場合は一致と判断
           }
@@ -219,8 +245,7 @@ public class DriveSample {
     }
 
     if (!ret) {
-      ret = ((notExistAtDriveItemList.size() == 0) && (notExistAtLocalFileList.size() == 0)
-          && (notMatchItemList.size() == 0));
+      ret = actionInfoList.size() == 0;
     }
 
     return ret;
