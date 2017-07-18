@@ -26,11 +26,13 @@ import com.google.api.client.http.GenericUrl;
 import com.google.api.client.http.HttpTransport;
 import com.google.api.client.json.JsonFactory;
 import com.google.api.client.json.jackson2.JacksonFactory;
+import com.google.api.client.util.DateTime;
 import com.google.api.client.util.store.DataStoreFactory;
 import com.google.api.client.util.store.FileDataStoreFactory;
 import com.google.api.services.drive.Drive;
 import com.google.api.services.drive.DriveScopes;
 import com.google.api.services.drive.model.File;
+import com.google.common.io.Files;
 
 import jp.co.thcomp.google_drive.ActionInfo.ActionType;
 
@@ -129,9 +131,7 @@ public class DriveSample {
     System.exit(1);
   }
 
-  private static void syncFolder(FileListHelper helper, String localFolderPath,
-      String driveItemPath) {
-    DriveItem item = helper.getDriveItem(driveItemPath);
+  private static void syncFolder(FileListHelper helper, String localFolderPath, DriveItem item) {
     java.io.File localRootFolder = new java.io.File(localFolderPath);
 
     ArrayList<ActionInfo> actionInfoList = new ArrayList<ActionInfo>();
@@ -143,19 +143,19 @@ public class DriveSample {
           switch (actionInfo.getActionType()) {
             case UploadToDrive:
               // upload local files to Google Drive
-              uploadLocalFilesToGoogleDrive(actionInfo);
+              uploadLocalFilesToGoogleDrive(helper, actionInfo);
               break;
             case DownloadToLocal:
               // download file to local file system at Google Drive
-              downloadGoogleDriveFilesToLocalFileSystem(actionInfo);
+              downloadGoogleDriveFilesToLocalFileSystem(helper, actionInfo);
               break;
             case UpdateFromLocalToDrive:
               // update drive item by local file
-              updateFileFromLocalToDrive(actionInfo);
+              updateFileFromLocalToDrive(helper, actionInfo);
               break;
             case UpdateFromDriveToLocal:
               // update drive item by local file
-              updateFileFromDriveToLocal(actionInfo);
+              updateFileFromDriveToLocal(helper, actionInfo);
               break;
           }
         }
@@ -163,26 +163,93 @@ public class DriveSample {
     }
   }
 
-  private static void uploadLocalFilesToGoogleDrive(ActionInfo actionInfo) {
+  private static void syncFolder(FileListHelper helper, String localFolderPath,
+      String driveItemPath) {
+    DriveItem item = helper.getDriveItem(driveItemPath);
+    if (item != null) {
+      syncFolder(helper, localFolderPath, item);
+    }
+  }
+
+  private static void uploadLocalFilesToGoogleDrive(FileListHelper helper, ActionInfo actionInfo) {
     java.io.File notExistAtDriveItem = (java.io.File) actionInfo.getUpdateFrom();
     DriveItem parentDriveItem = (DriveItem) actionInfo.getUpdateTo();
 
     if (notExistAtDriveItem.isDirectory()) {
+      File folderMetadata = new File();
+      DateTime localFileDateTime = new DateTime(notExistAtDriveItem.lastModified());
 
+      folderMetadata.setTitle(notExistAtDriveItem.getName());
+      folderMetadata.setMimeType("application/vnd.google-apps.folder");
+      folderMetadata.setCreatedDate(localFileDateTime);
+      folderMetadata.setLastViewedByMeDate(localFileDateTime);
+
+      try {
+        File folder = drive.files().insert(folderMetadata).setFields("id").execute();
+        DriveItem folderDriveItem = new DriveItem(folder);
+        parentDriveItem.addChild(folderDriveItem);
+        syncFolder(helper, notExistAtDriveItem.getAbsolutePath(), folderDriveItem);
+      } catch (IOException exception) {
+        exception.printStackTrace();
+      }
+    } else {
+      File fileMetadata = new File();
+      DateTime localFileDateTime = new DateTime(notExistAtDriveItem.lastModified());
+      fileMetadata.setTitle(notExistAtDriveItem.getName());
+      fileMetadata.setCreatedDate(localFileDateTime);
+      fileMetadata.setLastViewedByMeDate(localFileDateTime);
+
+      FileContent mediaContent = null;
+      String fileExtension = Files.getFileExtension(notExistAtDriveItem.getName());
+
+      switch (fileExtension) {
+        case "jpg":
+        case "jpeg":
+          mediaContent = new FileContent("image/jpeg", notExistAtDriveItem);
+          break;
+
+        case "png":
+          mediaContent = new FileContent("image/png", notExistAtDriveItem);
+          break;
+
+        case "bmp":
+          mediaContent = new FileContent("image/bmp", notExistAtDriveItem);
+          break;
+
+        case "gif":
+          mediaContent = new FileContent("image/gif", notExistAtDriveItem);
+          break;
+      }
+
+      if (mediaContent != null) {
+        Drive.Files.Insert insert;
+        try {
+          insert = drive.files().insert(fileMetadata, mediaContent);
+          MediaHttpUploader uploader = insert.getMediaHttpUploader();
+          uploader.setDirectUploadEnabled(true);
+          uploader.setProgressListener(new FileUploadProgressListener());
+          File insertFile = insert.execute();
+          parentDriveItem.addChild(insertFile);
+        } catch (IOException exception) {
+          // TODO Auto-generated catch block
+          exception.printStackTrace();
+        }
+      }
     }
   }
 
-  private static void downloadGoogleDriveFilesToLocalFileSystem(ActionInfo actionInfo) {
+  private static void downloadGoogleDriveFilesToLocalFileSystem(FileListHelper helper,
+      ActionInfo actionInfo) {
     DriveItem notExistAtLocalFile = (DriveItem) actionInfo.getUpdateFrom();
     java.io.File parentLocalFolder = (java.io.File) actionInfo.getUpdateTo();
   }
 
-  private static void updateFileFromLocalToDrive(ActionInfo actionInfo) {
+  private static void updateFileFromLocalToDrive(FileListHelper helper, ActionInfo actionInfo) {
     java.io.File notExistAtRemoteFile = (java.io.File) actionInfo.getUpdateFrom();
     DriveItem parentLocalFolder = (DriveItem) actionInfo.getUpdateTo();
   }
 
-  private static void updateFileFromDriveToLocal(ActionInfo actionInfo) {
+  private static void updateFileFromDriveToLocal(FileListHelper helper, ActionInfo actionInfo) {
     DriveItem notExistAtLocalFile = (DriveItem) actionInfo.getUpdateFrom();
     java.io.File parentLocalFolder = (java.io.File) actionInfo.getUpdateTo();
   }
