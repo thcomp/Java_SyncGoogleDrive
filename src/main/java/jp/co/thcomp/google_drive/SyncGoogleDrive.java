@@ -1,17 +1,3 @@
-/*
- * Copyright (c) 2012 Google Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
- * in compliance with the License. You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software distributed under the License
- * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
- * or implied. See the License for the specific language governing permissions and limitations under
- * the License.
- */
-
 package jp.co.thcomp.google_drive;
 
 import com.google.api.client.auth.oauth2.Credential;
@@ -36,43 +22,32 @@ import com.google.common.io.Files;
 
 import jp.co.thcomp.google_drive.ActionInfo.ActionType;
 
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
-/**
- * A sample application that runs multiple requests against the Drive API. The requests this sample
- * makes are:
- * <ul>
- * <li>Does a resumable media upload</li>
- * <li>Updates the uploaded file by renaming it</li>
- * <li>Does a resumable media download</li>
- * <li>Does a direct media upload</li>
- * <li>Does a direct media download</li>
- * </ul>
- *
- * @author rmistry@google.com (Ravi Mistry)
- */
-public class DriveSample {
+public class SyncGoogleDrive {
+  private static final String[] PARAMS =
+      {"--apikey", "--local_folder_path", "--google_drive_folder_name"};
+
+  private static final String PARAM_APIKEY = "--apikey";
+
+  private static final String PARAM_TARGET_LOCAL_FOLDER_PATH = "--local_folder_path";
+
+  private static final String PARAM_TARGET_GOOGLE_DRIVE_TOP_FOLDER_NAME =
+      "--google_drive_folder_name";
 
   /**
    * Be sure to specify the name of your application. If the application name is {@code null} or
    * blank, the application will log a warning. Suggested format is "MyCompany-ProductName/1.0".
    */
-  private static final String APPLICATION_NAME = "aaa";
-
-  private static final String UPLOAD_FILE_PATH =
-      "C:\\Users\\H_Tatsuguchi\\Downloads\\S__4980756.jpg";
-  private static final String DIR_FOR_DOWNLOADS = "C:\\Users\\H_Tatsuguchi\\Downloads";
-  private static final java.io.File UPLOAD_FILE = new java.io.File(UPLOAD_FILE_PATH);
+  private static final String APPLICATION_NAME = SyncGoogleDrive.class.getSimpleName();
 
   /** Directory to store user credentials. */
   private static final java.io.File DATA_STORE_DIR =
-      new java.io.File(System.getProperty("user.home"), ".store/drive_sample");
+      new java.io.File(System.getProperty("user.home"), ".store/sync_google_drive");
 
   /**
    * Global instance of the {@link DataStoreFactory}. The best practice is to make it a single
@@ -93,7 +68,7 @@ public class DriveSample {
   private static Credential authorize() throws Exception {
     // load client secrets
     GoogleClientSecrets clientSecrets = GoogleClientSecrets.load(JSON_FACTORY,
-        new InputStreamReader(DriveSample.class.getResourceAsStream("/client_secrets.json")));
+        new InputStreamReader(SyncGoogleDrive.class.getResourceAsStream("/client_secrets.json")));
     if (clientSecrets.getDetails().getClientId().startsWith("Enter")
         || clientSecrets.getDetails().getClientSecret().startsWith("Enter ")) {
       System.out.println(
@@ -111,24 +86,58 @@ public class DriveSample {
   }
 
   public static void main(String[] args) {
-    try {
-      httpTransport = GoogleNetHttpTransport.newTrustedTransport();
-      dataStoreFactory = new FileDataStoreFactory(DATA_STORE_DIR);
-      // authorization
-      Credential credential = authorize();
-      // set up the global Drive instance
-      drive = new Drive.Builder(httpTransport, JSON_FACTORY, credential)
-          .setApplicationName(APPLICATION_NAME).build();
+    HashMap<String, String> keyValueMap = new HashMap<String, String>();
 
-      FileListHelper helper = new FileListHelper(drive, "AIzaSyBhkIrt7Sxf8WulmQysmawOTQnD1TATgZU");
-      syncFolder(helper, "" /* TODO */, "Photo");
-      return;
-    } catch (IOException e) {
-      System.err.println(e.getMessage());
-    } catch (Throwable t) {
-      t.printStackTrace();
+    if (args != null && args.length > 0) {
+      for (String arg : args) {
+        String[] argKeyValue = arg.split(arg, 2);
+
+        if (argKeyValue.length > 1) {
+          switch (argKeyValue[0]) {
+            case PARAM_APIKEY:
+            case PARAM_TARGET_LOCAL_FOLDER_PATH:
+            case PARAM_TARGET_GOOGLE_DRIVE_TOP_FOLDER_NAME:
+              keyValueMap.put(argKeyValue[0], argKeyValue[1]);
+              break;
+          }
+        }
+      }
     }
+
+    String apiKey = keyValueMap.get(PARAM_APIKEY);
+    String localFolderPath = keyValueMap.get(PARAM_TARGET_LOCAL_FOLDER_PATH);
+    String googleDriveTopFolderName = keyValueMap.get(PARAM_TARGET_GOOGLE_DRIVE_TOP_FOLDER_NAME);
+
+    if (!isEmpty(apiKey) && !isEmpty(localFolderPath) && !isEmpty(googleDriveTopFolderName)) {
+      try {
+        httpTransport = GoogleNetHttpTransport.newTrustedTransport();
+        dataStoreFactory = new FileDataStoreFactory(DATA_STORE_DIR);
+        // authorization
+        Credential credential = authorize();
+        // set up the global Drive instance
+        drive = new Drive.Builder(httpTransport, JSON_FACTORY, credential)
+            .setApplicationName(APPLICATION_NAME).build();
+
+        FileListHelper helper = new FileListHelper(drive, apiKey);
+        syncFolder(helper, localFolderPath, googleDriveTopFolderName);
+        return;
+      } catch (IOException e) {
+        System.err.println(e.getMessage());
+      } catch (Throwable t) {
+        t.printStackTrace();
+      }
+    } else {
+      System.out.println("set following parameters:");
+      System.out.println(PARAM_APIKEY);
+      System.out.println(PARAM_TARGET_LOCAL_FOLDER_PATH);
+      System.out.println(PARAM_TARGET_GOOGLE_DRIVE_TOP_FOLDER_NAME);
+    }
+
     System.exit(1);
+  }
+
+  private static boolean isEmpty(String text) {
+    return text == null || text.length() == 0;
   }
 
   private static void syncFolder(FileListHelper helper, String localFolderPath, DriveItem item) {
@@ -147,7 +156,11 @@ public class DriveSample {
               break;
             case DownloadToLocal:
               // download file to local file system at Google Drive
-              downloadGoogleDriveFilesToLocalFileSystem(helper, actionInfo);
+              try {
+                downloadGoogleDriveFilesToLocalFileSystem(helper, actionInfo);
+              } catch (IOException e) {
+                e.printStackTrace();
+              }
               break;
             case UpdateFromLocalToDrive:
               // update drive item by local file
@@ -231,7 +244,6 @@ public class DriveSample {
           File insertFile = insert.execute();
           parentDriveItem.addChild(insertFile);
         } catch (IOException exception) {
-          // TODO Auto-generated catch block
           exception.printStackTrace();
         }
       }
@@ -239,19 +251,91 @@ public class DriveSample {
   }
 
   private static void downloadGoogleDriveFilesToLocalFileSystem(FileListHelper helper,
-      ActionInfo actionInfo) {
+      ActionInfo actionInfo) throws IOException {
     DriveItem notExistAtLocalFile = (DriveItem) actionInfo.getUpdateFrom();
     java.io.File parentLocalFolder = (java.io.File) actionInfo.getUpdateTo();
+
+    if (notExistAtLocalFile.isFolder()) {
+      java.io.File localFolder = new java.io.File(parentLocalFolder.getAbsolutePath()
+          + java.io.File.pathSeparator + notExistAtLocalFile.getTitle());
+      if (!localFolder.exists()) {
+        localFolder.mkdirs();
+      }
+
+      if (localFolder.exists()) {
+        if (notExistAtLocalFile.getChildCount() == 0) {
+          // 念のため子要素の取得を試みる
+          notExistAtLocalFile = helper.getDriveItem(notExistAtLocalFile);
+          int childCount = 0;
+          if ((childCount = notExistAtLocalFile.getChildCount()) > 0) {
+            boolean errorOccurred = false;
+            for (int i = 0; i < childCount; i++) {
+              ActionInfo tempActionInfo = new ActionInfo(ActionInfo.ActionType.DownloadToLocal,
+                  notExistAtLocalFile.getChildAt(i), localFolder);
+              try {
+                downloadGoogleDriveFilesToLocalFileSystem(helper, tempActionInfo);
+              } catch (IOException e) {
+                errorOccurred = true;
+              }
+            }
+
+            if (!errorOccurred) {
+              // 最終更新日をGoogle Driveに合わせる
+              localFolder.setLastModified(notExistAtLocalFile.getLastModified());
+            } else {
+              // エラーがあった場合は次のsync時に更新したいので、更新日を0にして、Google Driveより前の日付にしておく
+              localFolder.setLastModified(0);
+            }
+          }
+        }
+      }
+    } else {
+      java.io.File localFile = new java.io.File(parentLocalFolder.getAbsolutePath()
+          + java.io.File.pathSeparator + notExistAtLocalFile.getTitle());
+
+      // ローカルへのダウンロードは実施しない
+      if (!localFile.exists()) {
+        java.io.FileOutputStream localFileStream = null;
+        try {
+          localFileStream = new java.io.FileOutputStream(localFile);
+
+          MediaHttpDownloader downloader =
+              new MediaHttpDownloader(httpTransport, drive.getRequestFactory().getInitializer());
+          downloader.setDirectDownloadEnabled(true);
+          downloader.setProgressListener(new FileDownloadProgressListener());
+          downloader.download(new GenericUrl(notExistAtLocalFile.getDownloadUrl()),
+              localFileStream);
+
+          // 最終更新日をGoogle Driveに合わせる
+          localFile.setLastModified(notExistAtLocalFile.getLastModified());
+        } finally {
+          if (localFileStream != null) {
+            try {
+              localFileStream.close();
+            } catch (IOException exception) {
+              exception.printStackTrace();
+            } finally {
+              localFileStream = null;
+            }
+          }
+        }
+      } else {
+        System.out.println(
+            "dont downaload \"" + localFile.getAbsolutePath() + "\", because it already exists");
+      }
+    }
   }
 
   private static void updateFileFromLocalToDrive(FileListHelper helper, ActionInfo actionInfo) {
-    java.io.File notExistAtRemoteFile = (java.io.File) actionInfo.getUpdateFrom();
-    DriveItem parentLocalFolder = (DriveItem) actionInfo.getUpdateTo();
+    // TODO
   }
 
   private static void updateFileFromDriveToLocal(FileListHelper helper, ActionInfo actionInfo) {
-    DriveItem notExistAtLocalFile = (DriveItem) actionInfo.getUpdateFrom();
-    java.io.File parentLocalFolder = (java.io.File) actionInfo.getUpdateTo();
+    try {
+      downloadGoogleDriveFilesToLocalFileSystem(helper, actionInfo);
+    } catch (IOException e) {
+      e.printStackTrace();
+    }
   }
 
   private static boolean isMatch(java.io.File localFolder, DriveItem driveFolder,
@@ -316,45 +400,5 @@ public class DriveSample {
     }
 
     return ret;
-  }
-
-  /** Uploads a file using either resumable or direct media upload. */
-  private static File uploadFile(boolean useDirectUpload) throws IOException {
-    File fileMetadata = new File();
-    fileMetadata.setTitle(UPLOAD_FILE.getName());
-
-    FileContent mediaContent = new FileContent("image/jpeg", UPLOAD_FILE);
-
-    Drive.Files.Insert insert = drive.files().insert(fileMetadata, mediaContent);
-    MediaHttpUploader uploader = insert.getMediaHttpUploader();
-    uploader.setDirectUploadEnabled(useDirectUpload);
-    uploader.setProgressListener(new FileUploadProgressListener());
-    return insert.execute();
-  }
-
-  /** Updates the name of the uploaded file to have a "drivetest-" prefix. */
-  private static File updateFileWithTestSuffix(String id) throws IOException {
-    File fileMetadata = new File();
-    fileMetadata.setTitle("drivetest-" + UPLOAD_FILE.getName());
-
-    Drive.Files.Update update = drive.files().update(id, fileMetadata);
-    return update.execute();
-  }
-
-  /** Downloads a file using either resumable or direct media download. */
-  private static void downloadFile(boolean useDirectDownload, File uploadedFile)
-      throws IOException {
-    // create parent directory (if necessary)
-    java.io.File parentDir = new java.io.File(DIR_FOR_DOWNLOADS);
-    if (!parentDir.exists() && !parentDir.mkdirs()) {
-      throw new IOException("Unable to create parent directory");
-    }
-    OutputStream out = new FileOutputStream(new java.io.File(parentDir, uploadedFile.getTitle()));
-
-    MediaHttpDownloader downloader =
-        new MediaHttpDownloader(httpTransport, drive.getRequestFactory().getInitializer());
-    downloader.setDirectDownloadEnabled(useDirectDownload);
-    downloader.setProgressListener(new FileDownloadProgressListener());
-    downloader.download(new GenericUrl(uploadedFile.getDownloadUrl()), out);
   }
 }

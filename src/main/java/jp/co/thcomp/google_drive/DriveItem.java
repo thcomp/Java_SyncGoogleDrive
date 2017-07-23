@@ -57,6 +57,10 @@ public class DriveItem {
     return mFile.getModifiedDate().getValue();
   }
 
+  public String getDownloadUrl() {
+    return mFile.getDownloadUrl();
+  }
+
   public void addChild(DriveItem item) {
     synchronized (this) {
       String id = item.mFile.getId();
