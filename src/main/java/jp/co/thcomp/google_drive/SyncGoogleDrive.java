@@ -18,19 +18,21 @@ import com.google.api.client.util.store.FileDataStoreFactory;
 import com.google.api.services.drive.Drive;
 import com.google.api.services.drive.DriveScopes;
 import com.google.api.services.drive.model.File;
+import com.google.api.services.drive.model.ParentReference;
 import com.google.common.io.Files;
 
 import jp.co.thcomp.google_drive.ActionInfo.ActionType;
 
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 
 public class SyncGoogleDrive {
-  private static final String[] PARAMS =
-      {"--apikey", "--local_folder_path", "--google_drive_folder_name"};
+  private static final String PARAM_CLIENT_SECRET_PATH = "--client_secret_path";
 
   private static final String PARAM_APIKEY = "--apikey";
 
@@ -64,16 +66,76 @@ public class SyncGoogleDrive {
   /** Global Drive API client. */
   private static Drive drive;
 
+  public static void main(String[] args) {
+    HashMap<String, String> keyValueMap = new HashMap<String, String>();
+
+    if (args != null && args.length > 0) {
+      for (String arg : args) {
+        String[] argKeyValue = arg.split("=", 2);
+
+        if (argKeyValue.length > 1) {
+          switch (argKeyValue[0]) {
+            case PARAM_CLIENT_SECRET_PATH:
+            case PARAM_APIKEY:
+            case PARAM_TARGET_LOCAL_FOLDER_PATH:
+            case PARAM_TARGET_GOOGLE_DRIVE_TOP_FOLDER_NAME:
+              keyValueMap.put(argKeyValue[0], argKeyValue[1]);
+              break;
+          }
+        }
+      }
+    }
+
+    String clientSecretPath = keyValueMap.get(PARAM_CLIENT_SECRET_PATH);
+    String apiKey = keyValueMap.get(PARAM_APIKEY);
+    String localFolderPath = keyValueMap.get(PARAM_TARGET_LOCAL_FOLDER_PATH);
+    String googleDriveTopFolderName = keyValueMap.get(PARAM_TARGET_GOOGLE_DRIVE_TOP_FOLDER_NAME);
+
+    if (!isEmpty(clientSecretPath) && !isEmpty(apiKey) && !isEmpty(localFolderPath)
+        && !isEmpty(googleDriveTopFolderName)) {
+      try {
+        httpTransport = GoogleNetHttpTransport.newTrustedTransport();
+        dataStoreFactory = new FileDataStoreFactory(DATA_STORE_DIR);
+        // authorization
+        Credential credential = authorize(clientSecretPath);
+        // set up the global Drive instance
+        drive = new Drive.Builder(httpTransport, JSON_FACTORY, credential)
+            .setApplicationName(APPLICATION_NAME).build();
+
+        FileListHelper helper = new FileListHelper(drive);
+        syncFolder(helper, localFolderPath, googleDriveTopFolderName);
+        return;
+      } catch (IOException e) {
+        System.out.println(e.getMessage());
+      } catch (Throwable t) {
+        t.printStackTrace();
+      }
+    } else {
+      System.out.println("args=" + Arrays.toString(args));
+      System.out.println("clientSecretPath=" + clientSecretPath);
+      System.out.println("apiKey=" + apiKey);
+      System.out.println("localFolderPath=" + localFolderPath);
+      System.out.println("googleDriveTopFolderName=" + googleDriveTopFolderName);
+
+      System.out.println("set following parameters:");
+      System.out.println(PARAM_CLIENT_SECRET_PATH);
+      System.out.println(PARAM_APIKEY);
+      System.out.println(PARAM_TARGET_LOCAL_FOLDER_PATH);
+      System.out.println(PARAM_TARGET_GOOGLE_DRIVE_TOP_FOLDER_NAME);
+    }
+
+    System.exit(1);
+  }
+
   /** Authorizes the installed application to access user's protected data. */
-  private static Credential authorize() throws Exception {
+  private static Credential authorize(String clientSecretPath) throws Exception {
     // load client secrets
     GoogleClientSecrets clientSecrets = GoogleClientSecrets.load(JSON_FACTORY,
-        new InputStreamReader(SyncGoogleDrive.class.getResourceAsStream("/client_secrets.json")));
+        new InputStreamReader(new FileInputStream(clientSecretPath)));
     if (clientSecrets.getDetails().getClientId().startsWith("Enter")
         || clientSecrets.getDetails().getClientSecret().startsWith("Enter ")) {
       System.out.println(
-          "Enter Client ID and Secret from https://code.google.com/apis/console/?api=drive "
-              + "into drive-cmdline-sample/src/main/resources/client_secrets.json");
+          "Enter Client ID and Secret from https://code.google.com/apis/console/?api=drive");
       System.exit(1);
     }
     // set up authorization code flow
@@ -85,62 +147,12 @@ public class SyncGoogleDrive {
         /* new LocalServerReceiver() */new PseudoVerificationReceiver()).authorize("user");
   }
 
-  public static void main(String[] args) {
-    HashMap<String, String> keyValueMap = new HashMap<String, String>();
-
-    if (args != null && args.length > 0) {
-      for (String arg : args) {
-        String[] argKeyValue = arg.split(arg, 2);
-
-        if (argKeyValue.length > 1) {
-          switch (argKeyValue[0]) {
-            case PARAM_APIKEY:
-            case PARAM_TARGET_LOCAL_FOLDER_PATH:
-            case PARAM_TARGET_GOOGLE_DRIVE_TOP_FOLDER_NAME:
-              keyValueMap.put(argKeyValue[0], argKeyValue[1]);
-              break;
-          }
-        }
-      }
-    }
-
-    String apiKey = keyValueMap.get(PARAM_APIKEY);
-    String localFolderPath = keyValueMap.get(PARAM_TARGET_LOCAL_FOLDER_PATH);
-    String googleDriveTopFolderName = keyValueMap.get(PARAM_TARGET_GOOGLE_DRIVE_TOP_FOLDER_NAME);
-
-    if (!isEmpty(apiKey) && !isEmpty(localFolderPath) && !isEmpty(googleDriveTopFolderName)) {
-      try {
-        httpTransport = GoogleNetHttpTransport.newTrustedTransport();
-        dataStoreFactory = new FileDataStoreFactory(DATA_STORE_DIR);
-        // authorization
-        Credential credential = authorize();
-        // set up the global Drive instance
-        drive = new Drive.Builder(httpTransport, JSON_FACTORY, credential)
-            .setApplicationName(APPLICATION_NAME).build();
-
-        FileListHelper helper = new FileListHelper(drive, apiKey);
-        syncFolder(helper, localFolderPath, googleDriveTopFolderName);
-        return;
-      } catch (IOException e) {
-        System.err.println(e.getMessage());
-      } catch (Throwable t) {
-        t.printStackTrace();
-      }
-    } else {
-      System.out.println("set following parameters:");
-      System.out.println(PARAM_APIKEY);
-      System.out.println(PARAM_TARGET_LOCAL_FOLDER_PATH);
-      System.out.println(PARAM_TARGET_GOOGLE_DRIVE_TOP_FOLDER_NAME);
-    }
-
-    System.exit(1);
-  }
-
   private static boolean isEmpty(String text) {
     return text == null || text.length() == 0;
   }
 
   private static void syncFolder(FileListHelper helper, String localFolderPath, DriveItem item) {
+    System.out.println("local folder=" + localFolderPath + ", drive item=" + item);
     java.io.File localRootFolder = new java.io.File(localFolderPath);
 
     ArrayList<ActionInfo> actionInfoList = new ArrayList<ActionInfo>();
@@ -173,6 +185,8 @@ public class SyncGoogleDrive {
           }
         }
       }
+    } else {
+      System.out.println("matched(" + localFolderPath + ", " + item + ")");
     }
   }
 
@@ -185,6 +199,7 @@ public class SyncGoogleDrive {
   }
 
   private static void uploadLocalFilesToGoogleDrive(FileListHelper helper, ActionInfo actionInfo) {
+    System.out.println("uploadLocalFilesToGoogleDrive: actionInfo=" + actionInfo);
     java.io.File notExistAtDriveItem = (java.io.File) actionInfo.getUpdateFrom();
     DriveItem parentDriveItem = (DriveItem) actionInfo.getUpdateTo();
 
@@ -192,6 +207,13 @@ public class SyncGoogleDrive {
       File folderMetadata = new File();
       DateTime localFileDateTime = new DateTime(notExistAtDriveItem.lastModified());
 
+      ParentReference parentReference = new ParentReference();
+      parentReference.setKind(parentDriveItem.mFile.getKind());
+      parentReference.setId(parentDriveItem.mFile.getId());
+      ArrayList<ParentReference> parentReferenceList = new ArrayList<ParentReference>();
+      parentReferenceList.add(parentReference);
+
+      folderMetadata.setParents(parentReferenceList);
       folderMetadata.setTitle(notExistAtDriveItem.getName());
       folderMetadata.setMimeType("application/vnd.google-apps.folder");
       folderMetadata.setCreatedDate(localFileDateTime);
@@ -199,6 +221,10 @@ public class SyncGoogleDrive {
 
       try {
         File folder = drive.files().insert(folderMetadata).setFields("id").execute();
+        folder.setTitle(notExistAtDriveItem.getName());
+        folder.setMimeType("application/vnd.google-apps.folder");
+        folder.setCreatedDate(localFileDateTime);
+        folder.setLastViewedByMeDate(localFileDateTime);
         DriveItem folderDriveItem = new DriveItem(folder);
         parentDriveItem.addChild(folderDriveItem);
         syncFolder(helper, notExistAtDriveItem.getAbsolutePath(), folderDriveItem);
@@ -211,6 +237,13 @@ public class SyncGoogleDrive {
       fileMetadata.setTitle(notExistAtDriveItem.getName());
       fileMetadata.setCreatedDate(localFileDateTime);
       fileMetadata.setLastViewedByMeDate(localFileDateTime);
+
+      ParentReference parentReference = new ParentReference();
+      parentReference.setKind(parentDriveItem.mFile.getKind());
+      parentReference.setId(parentDriveItem.mFile.getId());
+      ArrayList<ParentReference> parentReferenceList = new ArrayList<ParentReference>();
+      parentReferenceList.add(parentReference);
+      fileMetadata.setParents(parentReferenceList);
 
       FileContent mediaContent = null;
       String fileExtension = Files.getFileExtension(notExistAtDriveItem.getName());
@@ -235,6 +268,8 @@ public class SyncGoogleDrive {
       }
 
       if (mediaContent != null) {
+        fileMetadata.setMimeType(mediaContent.getType());
+
         Drive.Files.Insert insert;
         try {
           insert = drive.files().insert(fileMetadata, mediaContent);
@@ -242,22 +277,30 @@ public class SyncGoogleDrive {
           uploader.setDirectUploadEnabled(true);
           uploader.setProgressListener(new FileUploadProgressListener());
           File insertFile = insert.execute();
+          insertFile.setTitle(notExistAtDriveItem.getName());
+          insertFile.setMimeType(mediaContent.getType());
+          insertFile.setCreatedDate(localFileDateTime);
+          insertFile.setLastViewedByMeDate(localFileDateTime);
+
           parentDriveItem.addChild(insertFile);
+
+          System.out.println("success to insert: " + actionInfo);
         } catch (IOException exception) {
           exception.printStackTrace();
         }
+      } else {
+        System.out.println("no media content: " + actionInfo);
       }
     }
   }
 
   private static void downloadGoogleDriveFilesToLocalFileSystem(FileListHelper helper,
       ActionInfo actionInfo) throws IOException {
+    System.out.println("downloadGoogleDriveFilesToLocalFileSystem: actionInfo=" + actionInfo);
     DriveItem notExistAtLocalFile = (DriveItem) actionInfo.getUpdateFrom();
-    java.io.File parentLocalFolder = (java.io.File) actionInfo.getUpdateTo();
 
     if (notExistAtLocalFile.isFolder()) {
-      java.io.File localFolder = new java.io.File(parentLocalFolder.getAbsolutePath()
-          + java.io.File.pathSeparator + notExistAtLocalFile.getTitle());
+      java.io.File localFolder = (java.io.File) actionInfo.getUpdateTo();
       if (!localFolder.exists()) {
         localFolder.mkdirs();
       }
@@ -275,6 +318,7 @@ public class SyncGoogleDrive {
               try {
                 downloadGoogleDriveFilesToLocalFileSystem(helper, tempActionInfo);
               } catch (IOException e) {
+                e.printStackTrace();
                 errorOccurred = true;
               }
             }
@@ -290,8 +334,7 @@ public class SyncGoogleDrive {
         }
       }
     } else {
-      java.io.File localFile = new java.io.File(parentLocalFolder.getAbsolutePath()
-          + java.io.File.pathSeparator + notExistAtLocalFile.getTitle());
+      java.io.File localFile = (java.io.File) actionInfo.getUpdateTo();
 
       // ローカルへのダウンロードは実施しない
       if (!localFile.exists()) {
@@ -331,6 +374,7 @@ public class SyncGoogleDrive {
   }
 
   private static void updateFileFromDriveToLocal(FileListHelper helper, ActionInfo actionInfo) {
+    System.out.println("updateFileFromDriveToLocal: actionInfo=" + actionInfo);
     try {
       downloadGoogleDriveFilesToLocalFileSystem(helper, actionInfo);
     } catch (IOException e) {
@@ -340,15 +384,19 @@ public class SyncGoogleDrive {
 
   private static boolean isMatch(java.io.File localFolder, DriveItem driveFolder,
       List<ActionInfo> actionInfoList) {
+    System.out.println("isMatch: localFolder=" + localFolder + ", driveFolder=" + driveFolder);
 
     boolean ret = false;
 
+    System.out.println("localFolder.lastModified()=" + localFolder.lastModified()
+        + ", driveFolder.getLastModified()=" + driveFolder.getLastModified());
     if (localFolder.lastModified() == driveFolder.getLastModified()) {
       ret = true;
     } else {
       java.io.File[] childFileArray = localFolder.listFiles();
       HashMap<String, java.io.File> localChildFileMapByName = new HashMap<String, java.io.File>();
 
+      System.out.println("check by local files");
       for (java.io.File childFile : childFileArray) {
         String childName = childFile.getName();
         localChildFileMapByName.put(childName, childFile);
@@ -356,9 +404,14 @@ public class SyncGoogleDrive {
         if (!childName.startsWith(".")) {
           DriveItem childDriveItem = driveFolder.getChildByName(childName);
 
+          System.out.println("childName=" + childName + ", childDriveItem=" + childDriveItem);
           if (childDriveItem == null) {
             actionInfoList.add(new ActionInfo(ActionType.UploadToDrive, childFile, driveFolder));
           } else {
+            System.out
+                .println("childDriveItem.getLastModified()=" + childDriveItem.getLastModified()
+                    + ", childFile.lastModified()=" + childFile.lastModified());
+
             // 最終更新日が新しい方が真として、それをリストに追加
             if (childDriveItem.getLastModified() > childFile.lastModified()) {
               actionInfoList.add(
@@ -373,14 +426,20 @@ public class SyncGoogleDrive {
         }
       }
 
+      System.out.println("check by drive items");
       for (int i = 0, size = driveFolder.getChildCount(); i < size; i++) {
         DriveItem childDriveItem = driveFolder.getChildAt(i);
         java.io.File childLocalFile = localChildFileMapByName.get(childDriveItem.getTitle());
 
+        System.out
+            .println("childLocalFile=" + childLocalFile + ", childDriveItem=" + childDriveItem);
         if (childLocalFile == null) {
           actionInfoList
               .add(new ActionInfo(ActionType.DownloadToLocal, childDriveItem, localFolder));
         } else {
+          System.out.println("childDriveItem.getLastModified()=" + childDriveItem.getLastModified()
+              + ", childFile.lastModified()=" + childLocalFile.lastModified());
+
           // 最終更新日が新しい方が真として、それをリストに追加
           if (childDriveItem.getLastModified() > childLocalFile.lastModified()) {
             actionInfoList.add(

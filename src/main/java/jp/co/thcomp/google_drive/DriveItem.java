@@ -14,6 +14,7 @@
 
 package jp.co.thcomp.google_drive;
 
+import com.google.api.client.util.DateTime;
 import com.google.api.services.drive.model.File;
 
 import java.util.ArrayList;
@@ -28,7 +29,7 @@ public class DriveItem {
   private HashMap<String, DriveItem> mChildDriveItemIdMap = new HashMap<String, DriveItem>();
   private HashMap<String, DriveItem> mChildDriveItemNameMap = new HashMap<String, DriveItem>();
 
-  private File mFile;
+  public File mFile;
   private boolean mIsFolder = false;
 
   public DriveItem(File file) {
@@ -54,7 +55,16 @@ public class DriveItem {
   }
 
   public long getLastModified() {
-    return mFile.getModifiedDate().getValue();
+    DateTime ret = mFile.getModifiedDate();
+
+    if (ret == null) {
+      ret = mFile.getModifiedByMeDate();
+      if (ret == null) {
+        ret = mFile.getCreatedDate();
+      }
+    }
+
+    return ret != null ? ret.getValue() : 0;
   }
 
   public String getDownloadUrl() {
@@ -101,4 +111,17 @@ public class DriveItem {
   public DriveItem getChildByName(String name) {
     return mChildDriveItemNameMap.get(name);
   }
+
+  /*
+   * (non-Javadoc)
+   * 
+   * @see java.lang.Object#toString()
+   */
+  @Override
+  public String toString() {
+    return "DriveItem [mChildDriveItemList=" + mChildDriveItemList + ", mFile=" + mFile
+        + ", mIsFolder=" + mIsFolder + "]";
+  }
+
+
 }

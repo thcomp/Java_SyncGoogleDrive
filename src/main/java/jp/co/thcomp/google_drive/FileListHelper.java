@@ -32,30 +32,17 @@ import java.util.List;
  */
 public class FileListHelper {
   private Drive mDriveApi;
-  private String mApiKey;
-  private Drive.Files.List mFilesListApi = null;
 
-  public FileListHelper(Drive driveApi, String apiKey) {
+  public FileListHelper(Drive driveApi) {
     if (driveApi == null) {
       throw new NullPointerException("driveApi == null");
     }
-    if (apiKey == null || apiKey.length() == 0) {
-      throw new NullPointerException("apiKey == '" + apiKey + "'");
-    }
 
     mDriveApi = driveApi;
-    mApiKey = apiKey;
-  }
-
-  private Drive.Files.List getFilesListApi() throws IOException {
-    if (mFilesListApi == null) {
-      mFilesListApi = mDriveApi.files().list().setMaxResults(1000);
-    }
-
-    return mFilesListApi;
   }
 
   public DriveItem getDriveItem(String directory) {
+    System.out.println("getDriveItem: directory=" + directory);
     DriveItem ret = null;
 
     try {
@@ -77,6 +64,8 @@ public class FileListHelper {
   }
 
   public DriveItem getDriveItem(DriveItem topItem) {
+    System.out.println("getDriveItem: topItem=" + topItem);
+
     final DriveItem fRet = topItem;
 
     try {
@@ -89,10 +78,12 @@ public class FileListHelper {
           @Override
           public void onSuccess(File t, HttpHeaders responseHeaders) throws IOException {
             fRet.addChild(t);
+            System.out.println("onSuccess: t=" + t + ", responseHeaders=" + responseHeaders);
           }
 
           @Override
           public void onFailure(Void e, HttpHeaders responseHeaders) throws IOException {
+            System.out.println("onFailure: e=" + e + ", responseHeaders=" + responseHeaders);
           }
         };
 
@@ -107,6 +98,7 @@ public class FileListHelper {
       e.printStackTrace();
     }
 
+    System.out.println("getDriveItem: ret=" + fRet);
     return fRet;
   }
 }

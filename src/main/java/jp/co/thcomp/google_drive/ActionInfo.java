@@ -44,4 +44,15 @@ public class ActionInfo {
   public Object getUpdateTo() {
     return mUpdateTo;
   }
+
+  /*
+   * (non-Javadoc)
+   * 
+   * @see java.lang.Object#toString()
+   */
+  @Override
+  public String toString() {
+    return "ActionInfo [mActionType=" + mActionType + ", mUpdateFrom=" + mUpdateFrom
+        + ", mUpdateTo=" + mUpdateTo + "]";
+  }
 }
